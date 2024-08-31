@@ -11,11 +11,15 @@ import (
 // Example:
 // - 5:hello -> hello
 // - 10:hello12345 -> hello12345
-func decodeBencode(bencodedString string) (interface{}, error) {
-	if unicode.IsDigit(rune(bencodedString[0])) {
-		var firstColonIndex int
 
-		for i := 0; i < len(bencodedString); i++ {
+func decodeBencode(bencodedString string) (interface{}, error) {
+	lengthOfStr := len(bencodedString)
+	firstChar := bencodedString[0]
+	lastChar := bencodedString[lengthOfStr-1:][0]
+
+	if unicode.IsDigit(rune(firstChar)) {
+		var firstColonIndex int
+		for i := 0; i < lengthOfStr; i++ {
 			if bencodedString[i] == ':' {
 				firstColonIndex = i
 				break
@@ -30,8 +34,17 @@ func decodeBencode(bencodedString string) (interface{}, error) {
 		}
 
 		return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
+	} else if firstChar == 'i' && lastChar == 'e' {
+		possibleNumber := bencodedString[1 : lengthOfStr-1]
+		value, err := strconv.Atoi(possibleNumber)
+		if err != nil {
+			fmt.Println("Invalid value for integer encoding")
+			return nil, err
+		}
+		return value, nil
+
 	} else {
-		return "", fmt.Errorf("Only strings are supported at the moment")
+		return "", fmt.Errorf("Only strings & numbers are supported at the moment")
 	}
 }
 
