@@ -72,17 +72,44 @@ func TestDecodeList_Invalid(t *testing.T) {
 
 }
 
-func TestMain(t *testing.T) {
+func TestDictionary(t *testing.T) {
+	result, remaining, err := decodeDictionary("de")
+	assert.Nil(t, err)
+	assert.Equal(t, result, map[string]any{})
+	assert.Equal(t, remaining, "")
+
+	result, remaining, err = decodeDictionary("d3:foo3:bar5:helloi52ee")
+	assert.Nil(t, err)
+	assert.Equal(t, result, map[string]any{"foo": "bar", "hello": 52})
+	assert.Equal(t, remaining, "")
+
+}
+
+func TestDictionary_Invalid(t *testing.T) {
+	_, _, err := decodeDictionary("d")
+	assert.NotNil(t, err)
+
+	_, _, err = decodeDictionary("")
+	assert.NotNil(t, err)
+
+	_, _, err = decodeDictionary("d5:hello")
+	assert.NotNil(t, err)
+
+	_, _, err = decodeDictionary("diloee")
+	assert.NotNil(t, err)
+
+	_, _, err = decodeDictionary("d2:hii12df")
+	assert.NotNil(t, err)
+
+	_, _, err = decodeDictionary("di33e2:hie")
+	assert.NotNil(t, err)
+
+}
+
+func TestRun(t *testing.T) {
 	result, err := run([]string{"decode", "5:hello"})
 	assert.Equal(t, result, "\"hello\"")
 	assert.Nil(t, err)
-
-	_, err = run([]string{"decode", "invalid"})
-	assert.NotNil(t, err)
-	_, err = run([]string{"decode", "-5:hmm"})
-	assert.NotNil(t, err)
-	_, err = run([]string{"decode", "hi:"})
-	assert.NotNil(t, err)
 
 	result, err = run([]string{"decode", "i52e"})
 	assert.Equal(t, result, "52")
@@ -91,4 +118,30 @@ func TestMain(t *testing.T) {
 	result, err = run([]string{"decode", "l5:helloi52ee"})
 	assert.Equal(t, result, "[\"hello\",52]")
 	assert.Nil(t, err)
+
+	result, err = run([]string{"decode", "d3:foo3:bar5:helloi52ee"})
+	assert.Equal(t, result, "{\"foo\":\"bar\",\"hello\":52}")
+	assert.Nil(t, err)
+
+	result, err = run([]string{"decode", "d4:spaml1:a1:bee"})
+	assert.Equal(t, result, "{\"spam\":[\"a\",\"b\"]}")
+	assert.Nil(t, err)
+}
+
+func TestRun_Invalid(t *testing.T) {
+	_, err := run([]string{})
+	assert.NotNil(t, err)
+
+	_, err = run([]string{"unknown_command"})
+	assert.NotNil(t, err)
+
+	_, err = run([]string{"decode", "invalid"})
+	assert.NotNil(t, err)
+
+	_, err = run([]string{"decode", "-5:hmm"})
+	assert.NotNil(t, err)
+
+	_, err = run([]string{"decode", "hi:"})
+	assert.NotNil(t, err)
+
 }

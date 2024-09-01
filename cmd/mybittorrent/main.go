@@ -68,6 +68,45 @@ func decodeList(bencodedString string) (value any, remaining string, err error) 
 
 }
 
+func decodeDictionary(bencodedString string) (value any, remaining string, err error) {
+	if len(bencodedString) < 2 {
+		return "", "", fmt.Errorf("invalid bencode dictionary")
+	}
+
+	result := map[string]any{}
+	rest := bencodedString[1:]
+	for rest[0] != 'e' {
+		key, remaining, err := decodeBencode(rest)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid bencode dictionary")
+		}
+		if remaining == "" {
+			return "", "", fmt.Errorf("invalid bencode dictionary")
+		}
+
+		value, remaining, err = decodeBencode(remaining)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid bencode dictionary")
+		}
+
+		strKey, ok := key.(string)
+		if !ok {
+			return "", "", fmt.Errorf("invalid bencode dictionary. Key must be string")
+		}
+
+		result[strKey] = value
+
+		rest = remaining
+
+		if remaining == "" {
+			return "", "", fmt.Errorf("invalid bencode dictionary. No closing 'e'")
+		}
+	}
+
+	return result, rest[1:], nil
+
+}
+
 func decodeBencode(bencodedString string) (value any, remain string, err error) {
 	firstChar := bencodedString[0]
 	switch {
@@ -77,6 +116,8 @@ func decodeBencode(bencodedString string) (value any, remain string, err error) 
 		return decodeInteger(bencodedString)
 	case firstChar == 'l':
 		return decodeList(bencodedString)
+	case firstChar == 'd':
+		return decodeDictionary(bencodedString)
 	default:
 		return "", "", fmt.Errorf("invalid bencode input")
 	}
@@ -85,8 +126,7 @@ func decodeBencode(bencodedString string) (value any, remain string, err error) 
 
 func run(args []string) (string, error) {
 	if len(args) < 2 {
-		fmt.Println("Usage: <command> <argument>")
-		os.Exit(1)
+		return "", fmt.Errorf("usage: <command> <argument>")
 	}
 
 	command := args[0]
