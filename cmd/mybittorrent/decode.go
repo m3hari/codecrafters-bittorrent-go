@@ -76,15 +76,15 @@ func decodeDictionary(bencodedString string) (value any, remaining string, err e
 	for rest[0] != 'e' {
 		key, remaining, err := decodeBencode(rest)
 		if err != nil {
-			return "", "", fmt.Errorf("invalid bencode dictionary")
+			return "", "", fmt.Errorf("invalid bencode dictionary. Failed to parse key")
 		}
 		if remaining == "" {
-			return "", "", fmt.Errorf("invalid bencode dictionary")
+			return "", "", fmt.Errorf("invalid bencode dictionary. No value for key")
 		}
 
 		value, remaining, err = decodeBencode(remaining)
 		if err != nil {
-			return "", "", fmt.Errorf("invalid bencode dictionary")
+			return "", "", fmt.Errorf("invalid bencode dictionary. Failed to parse value for key '%v'", key)
 		}
 
 		strKey, ok := key.(string)

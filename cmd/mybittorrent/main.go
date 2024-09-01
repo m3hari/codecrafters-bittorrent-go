@@ -12,18 +12,29 @@ func run(args []string) (string, error) {
 	}
 
 	command := args[0]
-	bencodedValue := args[1]
-	if command == "decode" {
-		decoded, _, err := decodeBencode(bencodedValue)
+	switch {
+	case command == "decode":
+		result, _, err := decodeBencode(args[1])
 		if err != nil {
 			return "", err
 		}
-		jsonOutput, err := json.Marshal(decoded)
+		jsonOutput, err := json.Marshal(result)
 		if err != nil {
-			return "", nil
+			return "", err
 		}
 		return string(jsonOutput), nil
-	} else {
+
+	case command == "info":
+		result, err := getTorrentMetaInfo(args[1])
+		if err != nil {
+			return "", err
+		}
+		fmt.Printf("Tracker URL: %v\n", result.announce)
+		fmt.Printf("Length: %v", result.info.length)
+
+		return "", nil
+
+	default:
 		return "", fmt.Errorf("Unknown command: " + command)
 	}
 }
