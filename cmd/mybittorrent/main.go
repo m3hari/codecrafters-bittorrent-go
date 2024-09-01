@@ -45,7 +45,11 @@ func decodeInteger(bencodedString string) (value int, remaining string, err erro
 }
 
 func decodeList(bencodedString string) (value any, remaining string, err error) {
-	var result []any
+	if len(bencodedString) < 2 || bencodedString[0] != 'l' {
+		return "", "", fmt.Errorf("invalid bencode list")
+	}
+
+	result := []any{}
 	rest := bencodedString[1:]
 	for rest[0] != 'e' {
 		value, remaining, err = decodeBencode(rest)
