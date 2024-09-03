@@ -3,10 +3,32 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+
+	"github.com/codecrafters-io/bittorrent-starter-go/internal/bencode"
 )
 
-func run(args []string) (string, error) {
+type Config struct {
+	Args []string
+	Out  io.Writer
+}
+
+type BittorrentClient struct {
+	Out io.Writer
+}
+
+func NewBittorrentClient(cfg *Config) *BittorrentClient {
+	client := &BittorrentClient{Out: os.Stdout}
+
+	if cfg != nil && cfg.Out != nil {
+		client.Out = cfg.Out
+	}
+
+	return client
+}
+
+func (client *BittorrentClient) Run(args []string) (string, error) {
 	if len(args) < 2 {
 		return "", fmt.Errorf("usage: <command> <argument>")
 	}
@@ -14,7 +36,7 @@ func run(args []string) (string, error) {
 	command := args[0]
 	switch {
 	case command == "decode":
-		result, _, err := decodeBencode(args[1])
+		result, _, err := bencode.Unmarshal(args[1])
 		if err != nil {
 			return "", err
 		}
@@ -25,12 +47,11 @@ func run(args []string) (string, error) {
 		return string(jsonOutput), nil
 
 	case command == "info":
-		result, err := getTorrentMetaInfo(args[1])
-		if err != nil {
-			return "", err
-		}
-		fmt.Printf("Tracker URL: %v\n", result.announce)
-		fmt.Printf("Length: %v", result.info.length)
+		torrent, _ := NewTorrent(args[1])
+		client.Out.Write([]byte(fmt.Sprintf("Tracker URL: %v\n", torrent.Announce)))
+		client.Out.Write([]byte(fmt.Sprintf("Length: %v\n", torrent.Info.Length)))
+		hash, _ := InfoHash(*torrent.Info)
+		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", hash)))
 
 		return "", nil
 
@@ -40,7 +61,9 @@ func run(args []string) (string, error) {
 }
 
 func main() {
-	result, err := run(os.Args[1:])
+	client := NewBittorrentClient(&Config{})
+
+	result, err := client.Run(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)
 	} else {

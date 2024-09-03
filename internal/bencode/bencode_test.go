@@ -1,10 +1,20 @@
-package main
+package bencode
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMarshal(t *testing.T) {
+	result, err := Marshal(map[string]interface{}{"foo": "bar"})
+	assert.Equal(t, "d3:foo3:bare", result)
+	assert.Nil(t, err)
+
+	result, err = Marshal(map[string]interface{}{"hello": 4, "amore": []any{"a", 22}})
+	assert.Equal(t, "d5:amorel1:ai22ee5:helloi4ee", result)
+	assert.Nil(t, err)
+}
 
 func TestDecodeString(t *testing.T) {
 	result, _, err := decodeString("4:spam")
@@ -15,6 +25,9 @@ func TestDecodeString(t *testing.T) {
 	assert.Equal(t, "hi", result)
 	assert.Equal(t, "i100elove", remaining)
 	assert.Nil(t, err)
+
+	result, _, _ = decodeString("0:")
+	assert.Equal(t, "", result)
 }
 
 func TestDecodeString_Invalid(t *testing.T) {
