@@ -52,6 +52,12 @@ func (client *BittorrentClient) Run(args []string) (string, error) {
 		client.Out.Write([]byte(fmt.Sprintf("Length: %v\n", torrent.Info.Length)))
 		hash, _ := InfoHash(*torrent.Info)
 		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", hash)))
+		client.Out.Write([]byte(fmt.Sprintf("Piece Length: %v\n", torrent.Info.PieceLength)))
+		client.Out.Write([]byte("Piece Hashes:\n"))
+		pieces, _ := PiecesHashes(*torrent)
+		for _, item := range pieces {
+			client.Out.Write([]byte(item))
+		}
 
 		return "", nil
 

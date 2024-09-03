@@ -84,5 +84,20 @@ func InfoHash(info TorrentInfo) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", sha1.Sum([]byte(bencodedString))), nil
+}
+
+func PiecesHashes(torrent Torrent) ([]string, error) {
+	pieces := torrent.Info.Pieces
+
+	if len(pieces)%20 != 0 {
+		return nil, fmt.Errorf("invalid pieces length")
+	}
+
+	result := make([]string, len(pieces)/20)
+	for i := 0; i < len(pieces); i += 20 {
+		result = append(result, fmt.Sprintf("%x\n", pieces[i:i+20]))
+	}
+
+	return result, nil
 
 }
