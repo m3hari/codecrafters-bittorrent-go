@@ -47,15 +47,27 @@ func (client *BittorrentClient) Run(args []string) (string, error) {
 		return string(jsonOutput), nil
 
 	case command == "info":
-		torrent, _ := NewTorrent(args[1])
+		torrent, err := NewTorrent(args[1])
+		if err != nil {
+			return "", err
+		}
+
+		infoHash, err := torrent.InfoHash()
+		if err != nil {
+			return "", err
+		}
+
+		pieceHashes, err := torrent.PieceHashes()
+		if err != nil {
+			return "", err
+		}
+
 		client.Out.Write([]byte(fmt.Sprintf("Tracker URL: %v\n", torrent.Announce)))
 		client.Out.Write([]byte(fmt.Sprintf("Length: %v\n", torrent.Info.Length)))
-		hash, _ := InfoHash(*torrent.Info)
-		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", hash)))
+		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", infoHash)))
 		client.Out.Write([]byte(fmt.Sprintf("Piece Length: %v\n", torrent.Info.PieceLength)))
 		client.Out.Write([]byte("Piece Hashes:\n"))
-		pieces, _ := PiecesHashes(*torrent)
-		for _, item := range pieces {
+		for _, item := range pieceHashes {
 			client.Out.Write([]byte(item))
 		}
 

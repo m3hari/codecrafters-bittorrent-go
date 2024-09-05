@@ -2,6 +2,7 @@ package bencode
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -162,4 +163,21 @@ func Unmarshal(bencodedString string) (value interface{}, remain string, err err
 	default:
 		return "", "", fmt.Errorf("invalid bencode input")
 	}
+}
+
+func ToBencodeDictionary(data interface{}) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+	value := reflect.ValueOf(data)
+	typ := reflect.TypeOf(data)
+	for i := 0; i < value.NumField(); i++ {
+		field := typ.Field(i)
+		fieldName := field.Tag.Get("bencode")
+		if fieldName == "" {
+			fieldName = field.Name
+		}
+		fieldValue := value.Field(i).Interface()
+
+		result[fieldName] = fieldValue
+	}
+	return result, nil
 }
