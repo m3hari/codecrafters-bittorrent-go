@@ -12,7 +12,8 @@ type TorrentInfo struct {
 	Name        string `bencode:"name"`
 	Length      int    `bencode:"length"`
 	PieceLength int    `bencode:"piece length"`
-	Pieces      string `bencode:"pieces"`
+	// concatenated SHA-1 hashes of each piece (20 bytes each)
+	Pieces string `bencode:"pieces"`
 }
 
 type Torrent struct {
