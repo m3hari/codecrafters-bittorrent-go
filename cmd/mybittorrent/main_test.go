@@ -9,25 +9,29 @@ import (
 
 func TestRunDecode(t *testing.T) {
 	buffer := &bytes.Buffer{}
-	result, err := NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "5:hello"})
+	err := NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "5:hello"})
 
-	assert.Equal(t, result, "\"hello\"")
+	assert.Equal(t, buffer.String(), "\"hello\"\n")
 	assert.Nil(t, err)
 
-	result, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "i52e"})
-	assert.Equal(t, result, "52")
+	buffer.Reset()
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "i52e"})
+	assert.Equal(t, buffer.String(), "52\n")
 	assert.Nil(t, err)
 
-	result, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "l5:helloi52ee"})
-	assert.Equal(t, result, "[\"hello\",52]")
+	buffer.Reset()
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "l5:helloi52ee"})
+	assert.Equal(t, buffer.String(), "[\"hello\",52]\n")
 	assert.Nil(t, err)
 
-	result, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "d3:foo3:bar5:helloi52ee"})
-	assert.Equal(t, result, "{\"foo\":\"bar\",\"hello\":52}")
+	buffer.Reset()
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "d3:foo3:bar5:helloi52ee"})
+	assert.Equal(t, buffer.String(), "{\"foo\":\"bar\",\"hello\":52}\n")
 	assert.Nil(t, err)
 
-	result, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "d4:spaml1:a1:bee"})
-	assert.Equal(t, result, "{\"spam\":[\"a\",\"b\"]}")
+	buffer.Reset()
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "d4:spaml1:a1:bee"})
+	assert.Equal(t, buffer.String(), "{\"spam\":[\"a\",\"b\"]}\n")
 	assert.Nil(t, err)
 }
 
@@ -46,25 +50,25 @@ f00d937a0213df1982bc8d097227ad9e909acc17
 `
 
 	actual := buffer.String()
-	assert.Contains(t, actual, expectedOutput)
+	assert.Equal(t, actual, expectedOutput)
 
 }
 
 func TestRun_Invalid(t *testing.T) {
 	buffer := &bytes.Buffer{}
-	_, err := NewBittorrentClient(&Config{Out: buffer}).Run([]string{})
+	err := NewBittorrentClient(&Config{Out: buffer}).Run([]string{})
 	assert.NotNil(t, err)
 
-	_, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"unknown_command"})
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"unknown_command"})
 	assert.NotNil(t, err)
 
-	_, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "invalid"})
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "invalid"})
 	assert.NotNil(t, err)
 
-	_, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "-5:hmm"})
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "-5:hmm"})
 	assert.NotNil(t, err)
 
-	_, err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "hi:"})
+	err = NewBittorrentClient(&Config{Out: buffer}).Run([]string{"decode", "hi:"})
 	assert.NotNil(t, err)
 
 }

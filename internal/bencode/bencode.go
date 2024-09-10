@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/codecrafters-io/bittorrent-starter-go/internal/utils"
+	"github.com/codecrafters-io/bittorrent-starter-go/internal/maps"
 )
 
 func Marshal(data interface{}) (string, error) {
@@ -29,7 +29,7 @@ func Marshal(data interface{}) (string, error) {
 		result += "e"
 		return result, nil
 	case map[string]interface{}:
-		keys := utils.GetDictionaryKeys(v)
+		keys := maps.Keys(v)
 		sort.Strings(keys)
 
 		result := "d"
@@ -68,12 +68,7 @@ func decodeString(bencodedString string) (value string, remaining string, err er
 		return "", "", fmt.Errorf("invalid bencode string. Length is greater than actual string length")
 	}
 
-	value = bencodedString[start:end]
-
-	// value, _ = byteStringToUtf8(value)
-
-	remaining = bencodedString[end:]
-	return value, remaining, nil
+	return bencodedString[start:end], bencodedString[end:], nil
 }
 
 func decodeInteger(bencodedString string) (value int, remaining string, err error) {
@@ -97,7 +92,7 @@ func decodeList(bencodedString string) (value interface{}, remaining string, err
 	result := []interface{}{}
 	rest := bencodedString[1:]
 	for rest[0] != 'e' {
-		value, remaining, err = Unmarshal(rest)
+		value, remaining, err = decode(rest)
 		if err != nil {
 			return "", "", fmt.Errorf("invalid bencode list")
 		}
@@ -119,7 +114,7 @@ func decodeDictionary(bencodedString string) (value interface{}, remaining strin
 	result := map[string]interface{}{}
 	rest := bencodedString[1:]
 	for rest[0] != 'e' {
-		key, remaining, err := Unmarshal(rest)
+		key, remaining, err := decode(rest)
 		if err != nil {
 			return "", "", fmt.Errorf("invalid bencode dictionary. Failed to parse key")
 		}
@@ -127,7 +122,7 @@ func decodeDictionary(bencodedString string) (value interface{}, remaining strin
 			return "", "", fmt.Errorf("invalid bencode dictionary. No value for key")
 		}
 
-		value, remaining, err = Unmarshal(remaining)
+		value, remaining, err = decode(remaining)
 		if err != nil {
 			return "", "", fmt.Errorf("invalid bencode dictionary. Failed to parse value for key '%v'", key)
 		}
@@ -149,7 +144,12 @@ func decodeDictionary(bencodedString string) (value interface{}, remaining strin
 	return result, rest[1:], nil
 }
 
-func Unmarshal(bencodedString string) (value interface{}, remain string, err error) {
+func Unmarshal(bencodedString string) (value interface{}, err error) {
+	result, _, err := decode(bencodedString)
+	return result, err
+}
+
+func decode(bencodedString string) (value interface{}, remain string, err error) {
 	firstChar := bencodedString[0]
 	switch {
 	case unicode.IsDigit(rune(firstChar)):

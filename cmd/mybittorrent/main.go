@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,63 +29,62 @@ func NewBittorrentClient(cfg *Config) *BittorrentClient {
 	return client
 }
 
-func (client *BittorrentClient) Run(args []string) (string, error) {
+func (client *BittorrentClient) Run(args []string) error {
 	if len(args) < 2 {
-		return "", fmt.Errorf("usage: <command> <argument>")
+		return fmt.Errorf("usage: <command> <argument>")
 	}
 
 	command := args[0]
 	switch {
 	case command == "decode":
-		result, _, err := bencode.Unmarshal(args[1])
+		result, err := bencode.Unmarshal(args[1])
 		if err != nil {
-			return "", err
+			return err
 		}
 		jsonOutput, err := json.Marshal(result)
 		if err != nil {
-			return "", err
+			return err
 		}
-		return string(jsonOutput), nil
+		client.Out.Write((jsonOutput))
+		client.Out.Write(([]byte("\n")))
+		return nil
 
 	case command == "info":
-		torrent, err := NewTorrent(args[1])
+		torrent, err := New(args[1])
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		infoHash, err := torrent.InfoHash()
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		pieceHashes, err := torrent.PieceHashes()
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		client.Out.Write([]byte(fmt.Sprintf("Tracker URL: %v\n", torrent.Announce)))
 		client.Out.Write([]byte(fmt.Sprintf("Length: %v\n", torrent.Info.Length)))
-		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", infoHash)))
+		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", fmt.Sprintf("%x", infoHash))))
 		client.Out.Write([]byte(fmt.Sprintf("Piece Length: %v\n", torrent.Info.PieceLength)))
 		client.Out.Write([]byte("Piece Hashes:\n"))
 		for _, item := range pieceHashes {
 			client.Out.Write([]byte(item))
 		}
 
-		return "", nil
-
+		return nil
 	default:
-		return "", fmt.Errorf("Unknown command: " + command)
+		return errors.ErrUnsupported
 	}
 }
 
 func main() {
 	client := NewBittorrentClient(&Config{})
 
-	result, err := client.Run(os.Args[1:])
+	err := client.Run(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)
-	} else {
-		fmt.Println(result)
 	}
 }

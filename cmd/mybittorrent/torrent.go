@@ -14,18 +14,19 @@ type TorrentInfo struct {
 	PieceLength int    `bencode:"piece length"`
 	Pieces      string `bencode:"pieces"`
 }
+
 type Torrent struct {
 	Announce string `bencode:"announce"`
 	Info     *TorrentInfo
 }
 
-func NewTorrent(fileName string) (torrent *Torrent, err error) {
+func New(fileName string) (torrent *Torrent, err error) {
 	rawData, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	result, _, err := bencode.Unmarshal(string(rawData))
+	result, err := bencode.Unmarshal(string(rawData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode bencode: %v", err)
 	}
@@ -52,16 +53,19 @@ func NewTorrent(fileName string) (torrent *Torrent, err error) {
 	return torrent, nil
 }
 
-func (torrent *Torrent) InfoHash() (string, error) {
+func (torrent *Torrent) InfoHash() ([20]byte, error) {
 	bencodeData, err := bencode.ToBencodeDictionary(*torrent.Info)
+	empty := [20]byte{}
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 	bencodedString, err := bencode.Marshal(bencodeData)
 	if err != nil {
-		return "", fmt.Errorf("failed to bencode info: %v", err)
+		return empty, fmt.Errorf("failed to bencode info: %v", err)
 	}
-	return fmt.Sprintf("%x", sha1.Sum([]byte(bencodedString))), nil
+
+	return sha1.Sum([]byte(bencodedString)), nil
+
 }
 
 func (torrent *Torrent) PieceHashes() ([]string, error) {
