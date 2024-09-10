@@ -53,6 +53,17 @@ f00d937a0213df1982bc8d097227ad9e909acc17
 	assert.Equal(t, actual, expectedOutput)
 
 }
+func TestRunPeers(t *testing.T) {
+	buffer := &bytes.Buffer{}
+	NewBittorrentClient(&Config{Out: buffer}).Run([]string{"peers", "../../sample.torrent"})
+
+	expectedOutput := `165.232.111.122:51437
+161.35.47.237:51419
+139.59.169.165:51487`
+	actual := buffer.String()
+	assert.Equal(t, actual, expectedOutput)
+
+}
 
 func TestRun_Invalid(t *testing.T) {
 	buffer := &bytes.Buffer{}

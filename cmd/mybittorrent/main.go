@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/codecrafters-io/bittorrent-starter-go/internal/bencode"
 )
@@ -75,6 +76,22 @@ func (client *BittorrentClient) Run(args []string) error {
 		}
 
 		return nil
+
+	case command == "peers":
+		torrent, err := New(args[1])
+		if err != nil {
+			return err
+		}
+
+		result, err := DiscoverPeers(torrent)
+		if err != nil {
+			return err
+		}
+
+		client.Out.Write([]byte(strings.Join(result.Peers, "\n")))
+
+		return nil
+
 	default:
 		return errors.ErrUnsupported
 	}
