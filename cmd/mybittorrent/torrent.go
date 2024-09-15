@@ -2,13 +2,27 @@ package main
 
 import (
 	"crypto/sha1"
+	"encoding/binary"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/codecrafters-io/bittorrent-starter-go/internal/bencode"
 )
 
-type TorrentInfo struct {
+const peerId string = "00112233445566778899"
+const peerPort string = "6881"
+
+type Torrent struct {
+	Announce string `bencode:"announce"`
+	Info     *Info
+}
+
+type Info struct {
 	Name        string `bencode:"name"`
 	Length      int    `bencode:"length"`
 	PieceLength int    `bencode:"piece length"`
@@ -16,15 +30,10 @@ type TorrentInfo struct {
 	Pieces string `bencode:"pieces"`
 }
 
-type Torrent struct {
-	Announce string `bencode:"announce"`
-	Info     *TorrentInfo
-}
-
 func NewTorrent(fileName string) (torrent *Torrent, err error) {
 	rawData, err := os.ReadFile(fileName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %v", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	result, err := bencode.Unmarshal(string(rawData))
@@ -39,7 +48,7 @@ func NewTorrent(fileName string) (torrent *Torrent, err error) {
 
 	info := data["info"].(map[string]interface{})
 
-	torrentInfo := &TorrentInfo{
+	torrentInfo := &Info{
 		Name:        info["name"].(string),
 		Length:      info["length"].(int),
 		PieceLength: info["piece length"].(int),
@@ -82,4 +91,132 @@ func (torrent *Torrent) PieceHashes() ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func (t *Torrent) Handshake(peerAddress string) (peerId []byte, err error) {
+	infoHash, err := t.InfoHash()
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := net.Dial("tcp", peerAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Close()
+
+	// Peer protocol handshake message is 68 bytes.
+	var handshake = make([]byte, 68)
+	handshake[0] = 19
+	copy(handshake[1:20], []byte("BitTorrent protocol"))
+	copy(handshake[28:48], infoHash[:])
+	copy(handshake[48:], []byte(peerId))
+
+	_, err = conn.Write(handshake)
+	if err != nil {
+		return nil, err
+	}
+
+	response := make([]byte, 68)
+	_, err = io.ReadFull(conn, response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response[48:], nil
+}
+
+type TrackerResponse struct {
+	Interval int
+	Peers    []string
+}
+
+func (t *Torrent) DiscoverPeers() (*TrackerResponse, error) {
+	infoHash, err := t.InfoHash()
+	if err != nil {
+		return nil, err
+	}
+
+	infoHashEscaped := url.QueryEscape(string(infoHash[:]))
+	queryParams := url.Values{
+		"peer_id":    {peerId},
+		"port":       {peerPort},
+		"uploaded":   {"0"},
+		"downloaded": {"0"},
+		"left":       {strconv.Itoa(t.Info.Length)},
+		"compact":    {string("1")},
+	}
+
+	// encoding the info hash along with the other query params breaks the url
+	resp, err := http.Get(t.Announce + "?" + queryParams.Encode() + "&info_hash=" + infoHashEscaped)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		err = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch peers. HTTP status code: %v", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body. err:%v", err)
+	}
+
+	rawBody := string(body)
+	value, err := bencode.Unmarshal(rawBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode response. response: %v err:%v", rawBody, err)
+	}
+
+	data, ok := value.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid response. root value is not a map. response: %v", rawBody)
+	}
+
+	interval, ok := data["interval"].(int)
+	if !ok {
+		return nil, fmt.Errorf("invalid response. Could not find interval. response: %v", rawBody)
+	}
+
+	peers, ok := data["peers"].(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid response.  Could not find peers. response: %v", rawBody)
+	}
+
+	peersList, err := parsePeersResponse(peers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TrackerResponse{
+		Interval: interval,
+		Peers:    peersList,
+	}, nil
+}
+
+func parsePeersResponse(byteString string) ([]string, error) {
+	data := []byte(byteString)
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("invalid response: empty peers field")
+	}
+
+	if len(data)%6 != 0 {
+		return nil, fmt.Errorf("invalid response: peers field length (%d) is not a multiple of 6", len(data))
+	}
+
+	peers := make([]string, 0, len(data)/6)
+	for i := 0; i < len(data); i += 6 {
+		ip := net.IP(data[i : i+4])
+		port := binary.BigEndian.Uint16(data[i+4 : i+6])
+		peers = append(peers, fmt.Sprintf("%s:%d", ip.String(), port))
+	}
+
+	return peers, nil
 }

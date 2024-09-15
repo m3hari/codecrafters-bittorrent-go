@@ -4,118 +4,198 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMarshal(t *testing.T) {
-	result, err := Marshal(map[string]interface{}{"foo": "bar"})
-	assert.Equal(t, "d3:foo3:bare", result)
-	assert.Nil(t, err)
+	testCases := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{"simple dictionary", map[string]interface{}{"foo": "bar"}, "d3:foo3:bare"},
+		{"complex dictionary", map[string]interface{}{"hello": 4, "amore": []any{"a", 22}}, "d5:amorel1:ai22ee5:helloi4ee"},
+	}
 
-	result, err = Marshal(map[string]interface{}{"hello": 4, "amore": []any{"a", 22}})
-	assert.Equal(t, "d5:amorel1:ai22ee5:helloi4ee", result)
-	assert.Nil(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Marshal(tc.input)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }
 
 func TestDecodeString(t *testing.T) {
-	result, _, err := decodeString("4:spam")
-	assert.Equal(t, "spam", result)
-	assert.Nil(t, err)
+	testCases := []struct {
+		name           string
+		input          string
+		expectedValue  string
+		expectedRemain string
+		expectError    bool
+	}{
+		{"valid string", "4:spam", "spam", "", false},
+		{"string with remaining", "2:hii100elove", "hi", "i100elove", false},
+		{"empty string", "0:", "", "", false},
+		{"invalid length", "4:sp", "", "", true},
+		{"missing content", "10:", "", "", true},
+		{"invalid format", "1x:ha", "", "", true},
+	}
 
-	result, remaining, err := decodeString("2:hii100elove")
-	assert.Equal(t, "hi", result)
-	assert.Equal(t, "i100elove", remaining)
-	assert.Nil(t, err)
-
-	result, _, _ = decodeString("0:")
-	assert.Equal(t, "", result)
-}
-
-func TestDecodeString_Invalid(t *testing.T) {
-	_, _, err := decodeString("4:sp")
-	assert.NotNil(t, err)
-	_, _, err = decodeString("10:")
-	assert.NotNil(t, err)
-	_, _, err = decodeString("1x:ha")
-	assert.NotNil(t, err)
-
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, remain, err := decodeString(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedValue, value)
+				assert.Equal(t, tc.expectedRemain, remain)
+			}
+		})
+	}
 }
 
 func TestDecodeInteger(t *testing.T) {
-	result, _, err := decodeInteger("i52e")
-	assert.Equal(t, 52, result)
-	assert.Nil(t, err)
+	testCases := []struct {
+		name           string
+		input          string
+		expectedValue  int
+		expectedRemain string
+		expectError    bool
+	}{
+		{"positive integer", "i52e", 52, "", false},
+		{"negative integer", "i-100ethisdoesnotmatter", -100, "thisdoesnotmatter", false},
+		{"invalid format", "i35d2e", 0, "", true},
+		{"missing end", "i2", 0, "", true},
+	}
 
-	result, _, err = decodeInteger("i-100ethisdoesnotmatter")
-	assert.Equal(t, -100, result)
-	assert.Nil(t, err)
-}
-
-func TestDecodeInteger_Invalid(t *testing.T) {
-	_, _, err := decodeInteger("i35d2e")
-	assert.NotNil(t, err)
-	_, _, err = decodeInteger("i2")
-	assert.NotNil(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, remain, err := decodeInteger(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedValue, value)
+				assert.Equal(t, tc.expectedRemain, remain)
+			}
+		})
+	}
 }
 
 func TestDecodeList(t *testing.T) {
-	result, remaining, err := decodeList("l4:spam4:eggse")
-	assert.Equal(t, []any{"spam", "eggs"}, result)
-	assert.Equal(t, remaining, "")
-	assert.Nil(t, err)
+	testCases := []struct {
+		name           string
+		input          string
+		expectedValue  []interface{}
+		expectedRemain string
+		expectError    bool
+	}{
+		{"string list", "l4:spam4:eggse", []interface{}{"spam", "eggs"}, "", false},
+		{"mixed list", "l4:spami52ee", []interface{}{"spam", 52}, "", false},
+		{"empty list", "le", []interface{}{}, "", false},
+		{"invalid list", "l4:", nil, "", true},
+		{"unclosed list", "lhi", nil, "", true},
+		{"incomplete list", "l2:hi", nil, "", true},
+	}
 
-	result, remaining, err = decodeList("l4:spami52ee")
-	assert.Equal(t, []any{"spam", 52}, result)
-	assert.Equal(t, remaining, "")
-	assert.Nil(t, err)
-
-	result, remaining, err = decodeList("le")
-	assert.Equal(t, []any{}, result)
-	assert.Equal(t, remaining, "")
-	assert.Nil(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, remain, err := decodeList(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedValue, value)
+				assert.Equal(t, tc.expectedRemain, remain)
+			}
+		})
+	}
 }
 
-func TestDecodeList_Invalid(t *testing.T) {
-	_, _, err := decodeList("l4:")
-	assert.NotNil(t, err)
+func TestDecodeDictionary(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedValue  map[string]interface{}
+		expectedRemain string
+		expectError    bool
+	}{
+		{"empty dictionary", "de", map[string]interface{}{}, "", false},
+		{"simple dictionary", "d3:foo3:bar5:helloi52ee", map[string]interface{}{"foo": "bar", "hello": 52}, "", false},
+		{"invalid dictionary", "d", nil, "", true},
+		{"missing value", "d5:hello", nil, "", true},
+		{"invalid key", "diloee", nil, "", true},
+		{"incomplete value", "d2:hii12df", nil, "", true},
+		{"non-string key", "di33e2:hie", nil, "", true},
+	}
 
-	_, _, err = decodeList("lhi")
-	assert.NotNil(t, err)
-
-	_, _, err = decodeList("l2:hi")
-	assert.NotNil(t, err)
-
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, remain, err := decodeDictionary(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedValue, value)
+				assert.Equal(t, tc.expectedRemain, remain)
+			}
+		})
+	}
 }
 
-func TestDictionary(t *testing.T) {
-	result, remaining, err := decodeDictionary("de")
-	assert.Nil(t, err)
-	assert.Equal(t, result, map[string]any{})
-	assert.Equal(t, remaining, "")
+func TestUnmarshal(t *testing.T) {
+	testCases := []struct {
+		name          string
+		input         string
+		expectedValue interface{}
+		expectError   bool
+	}{
+		{"string", "5:hello", "hello", false},
+		{"integer", "i52e", 52, false},
+		{"list", "l5:helloi52ee", []interface{}{"hello", 52}, false},
+		{"dictionary", "d3:foo3:bar5:helloi52ee", map[string]interface{}{"foo": "bar", "hello": 52}, false},
+		{"invalid input", "x", nil, true},
+	}
 
-	result, remaining, err = decodeDictionary("d3:foo3:bar5:helloi52ee")
-	assert.Nil(t, err)
-	assert.Equal(t, result, map[string]any{"foo": "bar", "hello": 52})
-	assert.Equal(t, remaining, "")
-
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, err := Unmarshal(tc.input)
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedValue, value)
+			}
+		})
+	}
 }
 
-func TestDictionary_Invalid(t *testing.T) {
-	_, _, err := decodeDictionary("d")
-	assert.NotNil(t, err)
+func TestToBencodeDictionary(t *testing.T) {
+	type TestStruct struct {
+		Foo  string `bencode:"foo"`
+		Bar  int    `bencode:"bar"`
+		Baz  string
+		Quux float64 `bencode:"quux"`
+	}
 
-	_, _, err = decodeDictionary("")
-	assert.NotNil(t, err)
+	testStruct := TestStruct{
+		Foo:  "hello",
+		Bar:  42,
+		Baz:  "world",
+		Quux: 3.14,
+	}
 
-	_, _, err = decodeDictionary("d5:hello")
-	assert.NotNil(t, err)
+	result, err := ToBencodeDictionary(testStruct)
+	require.NoError(t, err)
 
-	_, _, err = decodeDictionary("diloee")
-	assert.NotNil(t, err)
+	expected := map[string]interface{}{
+		"foo":  "hello",
+		"bar":  42,
+		"Baz":  "world",
+		"quux": 3.14,
+	}
 
-	_, _, err = decodeDictionary("d2:hii12df")
-	assert.NotNil(t, err)
-
-	_, _, err = decodeDictionary("di33e2:hie")
-	assert.NotNil(t, err)
-
+	assert.Equal(t, expected, result)
 }

@@ -2,133 +2,135 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 
 	"github.com/codecrafters-io/bittorrent-starter-go/internal/bencode"
 )
 
-type Config struct {
-	Args []string
-	Out  io.Writer
+type Client struct {
+	out io.Writer
 }
 
-type BittorrentClient struct {
-	Out io.Writer
-}
-
-func NewBittorrentClient(cfg *Config) *BittorrentClient {
-	client := &BittorrentClient{Out: os.Stdout}
-
-	if cfg != nil && cfg.Out != nil {
-		client.Out = cfg.Out
+func NewClient(out io.Writer) *Client {
+	if out == nil {
+		out = os.Stdout
 	}
-
-	return client
+	return &Client{out: out}
 }
 
-func (client *BittorrentClient) Run(args []string) error {
+func (c *Client) Run(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: <command> <argument>")
 	}
 
-	command := args[0]
-	switch {
-	case command == "decode":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: decode <bencoded string>")
-		}
-		result, err := bencode.Unmarshal(args[1])
-		if err != nil {
-			return err
-		}
-		jsonOutput, err := json.Marshal(result)
-		if err != nil {
-			return err
-		}
-		client.Out.Write((jsonOutput))
-		client.Out.Write(([]byte("\n")))
-		return nil
-
-	case command == "info":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: info <torrent file>")
-		}
-		torrent, err := NewTorrent(args[1])
-		if err != nil {
-			return err
-		}
-
-		infoHash, err := torrent.InfoHash()
-		if err != nil {
-			return err
-		}
-
-		pieceHashes, err := torrent.PieceHashes()
-		if err != nil {
-			return err
-		}
-
-		client.Out.Write([]byte(fmt.Sprintf("Tracker URL: %v\n", torrent.Announce)))
-		client.Out.Write([]byte(fmt.Sprintf("Length: %v\n", torrent.Info.Length)))
-		client.Out.Write([]byte(fmt.Sprintf("Info Hash: %v\n", fmt.Sprintf("%x", infoHash))))
-		client.Out.Write([]byte(fmt.Sprintf("Piece Length: %v\n", torrent.Info.PieceLength)))
-		client.Out.Write([]byte("Piece Hashes:\n"))
-		for _, item := range pieceHashes {
-			client.Out.Write([]byte(item))
-		}
-
-		return nil
-
-	case command == "peers":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: peers <torrent file>")
-		}
-		torrent, err := NewTorrent(args[1])
-		if err != nil {
-			return err
-		}
-		result, err := DiscoverPeers(torrent)
-		if err != nil {
-			return err
-		}
-
-		client.Out.Write([]byte(strings.Join(result.Peers, "\n")))
-
-		return nil
-
-	case command == "handshake":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: handshake <torrent file> <peer address>")
-		}
-
-		torrent, err := NewTorrent(args[1])
-		if err != nil {
-			return err
-		}
-
-		reply, err := handshake(torrent, args[2])
-		if err != nil {
-			return err
-		}
-
-		client.Out.Write([]byte(fmt.Sprintf("Peer ID: %x\n", reply[48:])))
-
-		return nil
-
-	default:
-		return errors.ErrUnsupported
+	cmd := args[0]
+	handler, ok := commandHandlers[cmd]
+	if !ok {
+		return fmt.Errorf("unknown command: %s", cmd)
 	}
+
+	return handler(c, args[1:])
+}
+
+var commandHandlers = map[string]func(*Client, []string) error{
+	"decode":    decodeCommand,
+	"info":      infoCommand,
+	"peers":     peersCommand,
+	"handshake": handshakeCommand,
+}
+
+func decodeCommand(c *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: decode <bencoded string>")
+	}
+	result, err := bencode.Unmarshal(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to decode: %w", err)
+	}
+	return json.NewEncoder(c.out).Encode(result)
+}
+
+func infoCommand(c *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: info <torrent file>")
+	}
+	torrent, err := NewTorrent(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to create torrent: %w", err)
+	}
+
+	infoHash, err := torrent.InfoHash()
+	if err != nil {
+		return fmt.Errorf("failed to get info hash: %w", err)
+	}
+
+	pieceHashes, err := torrent.PieceHashes()
+	if err != nil {
+		return fmt.Errorf("failed to get piece hashes: %w", err)
+	}
+
+	fmt.Fprintf(c.out, "Tracker URL: %s\n", torrent.Announce)
+	fmt.Fprintf(c.out, "Length: %d\n", torrent.Info.Length)
+	fmt.Fprintf(c.out, "Info Hash: %x\n", infoHash)
+	fmt.Fprintf(c.out, "Piece Length: %d\n", torrent.Info.PieceLength)
+	fmt.Fprintln(c.out, "Piece Hashes:")
+	for _, hash := range pieceHashes {
+		fmt.Fprintf(c.out, "%s", hash)
+	}
+
+	return nil
+}
+
+func peersCommand(c *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: peers <torrent file>")
+	}
+	torrent, err := NewTorrent(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to create torrent: %w", err)
+	}
+	result, err := torrent.DiscoverPeers()
+	if err != nil {
+		return fmt.Errorf("failed to discover peers: %w", err)
+	}
+
+	fmt.Fprintf(c.out, "%s", strings.Join(result.Peers, "\n"))
+
+	return nil
+}
+
+func handshakeCommand(c *Client, args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: handshake <torrent file> <peer address>")
+	}
+
+	torrent, err := NewTorrent(args[0])
+	if err != nil {
+		return fmt.Errorf("failed to create torrent: %w", err)
+	}
+
+	peerAddress := args[1]
+	if _, _, err := net.SplitHostPort(peerAddress); err != nil {
+		return fmt.Errorf("invalid peer address: %w", err)
+	}
+
+	peerID, err := torrent.Handshake(args[1])
+	if err != nil {
+		return fmt.Errorf("handshake failed: %w", err)
+	}
+
+	fmt.Fprintf(c.out, "Peer ID: %x\n", peerID)
+	return nil
 }
 
 func main() {
-	client := NewBittorrentClient(&Config{})
-
-	err := client.Run(os.Args[1:])
-	if err != nil {
-		fmt.Println(err)
+	client := NewClient(nil)
+	if err := client.Run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
 }
