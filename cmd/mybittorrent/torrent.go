@@ -21,7 +21,7 @@ type Torrent struct {
 	Info     *TorrentInfo
 }
 
-func New(fileName string) (torrent *Torrent, err error) {
+func NewTorrent(fileName string) (torrent *Torrent, err error) {
 	rawData, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
